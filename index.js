@@ -9,17 +9,8 @@ const cloudinary = require("cloudinary").v2;
 app.use(cors());
 app.use(express.json());
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/");
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  },
-});
-// console.log(process.env.IMGBB_API_KEY)
-
-const upload = multer({ storage: multer.memoryStorage() });
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
 // Configuration
 cloudinary.config({
@@ -28,9 +19,35 @@ cloudinary.config({
   api_secret: process.env.API_SECRET,
 });
 
+const uploadOnCloud = async (bufferFile) => {
+  try {
+    if (!bufferFile) {
+      console.error("no file found");
+    }
+    const response = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          resource_type: "auto",
+        },
+        (error, result) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(result);
+          }
+        }
+      );
+      uploadStream.end(bufferFile);
+    });
+    return response;
+  } catch (error) {
+    console.log(error);
+  }
+};
+
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const { default: axios } = require("axios");
-// const { pdfUpload } = require("./pdfUpload");
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.8hyfw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 const client = new MongoClient(uri, {
@@ -92,24 +109,10 @@ async function run() {
           phoneNum,
           email,
           note,
+          gender,
         } = req.body;
-        // const image = req.files["image"] ? req.files["image"][0] : null;
-        // const pdf = req.files["pdf"] ? req.files["pdf"][0] : null;
 
-        // const { surname, date } = req.body;
         const image = req.files["image"][0];
-        const pdf1 = req.files["pdf1"];
-        const pdf2 = req.files["pdf2"];
-        const pdf3 = req.files["pdf3"];
-        const pdf4 = req.files["pdf4"];
-        const pdf5 = req.files["pdf5"];
-        const pdf6 = req.files["pdf6"];
-        const pdf7 = req.files["pdf7"];
-        const pdf8 = req.files["pdf8"];
-
-        let pdfs = [pdf1, pdf2, pdf3, pdf4, pdf5, pdf6, pdf7, pdf8];
-        console.log(pdfs);
-
         // Upload image to ImgBB
         const imageFormData = new FormData();
         imageFormData.append("image", image.buffer.toString("base64"));
@@ -118,11 +121,54 @@ async function run() {
           `https://api.imgbb.com/1/upload?key=${process.env.IMGBB_API_KEY}`,
           imageFormData
         );
-
         const imageUrl = imgbbResponse.data.data.url;
 
-        let doc = {
+        const pdf1 = req.files.pdf1 ? req.files.pdf1[0]?.buffer : null;
+        const pdf2 = req.files.pdf2 ? req.files.pdf2[0]?.buffer : null;
+        const pdf3 = req.files.pdf3 ? req.files.pdf3[0]?.buffer : null;
+        const pdf4 = req.files.pdf4 ? req.files.pdf4[0]?.buffer : null;
+        const pdf5 = req.files.pdf5 ? req.files.pdf5[0]?.buffer : null;
+        const pdf6 = req.files.pdf6 ? req.files.pdf6[0]?.buffer : null;
+        const pdf7 = req.files.pdf7 ? req.files.pdf7[0]?.buffer : null;
+        const pdf8 = req.files.pdf8 ? req.files.pdf8[0]?.buffer : null;
+        let doc1;
+        let doc2;
+        let doc3;
+        let doc4;
+        let doc5;
+        let doc6;
+        let doc7;
+        let doc8;
+        if (pdf1) {
+          doc1 = await uploadOnCloud(pdf1);
+        }
+        if (pdf2) {
+          doc2 = await uploadOnCloud(pdf2);
+        }
+        if (pdf3) {
+          doc3 = await uploadOnCloud(pdf3);
+        }
+        if (pdf4) {
+          doc4 = await uploadOnCloud(pdf4);
+        }
+        if (pdf5) {
+          doc5 = await uploadOnCloud(pdf5);
+        }
+        if (pdf6) {
+          doc6 = await uploadOnCloud(pdf6);
+        }
+        if (pdf7) {
+          doc7 = await uploadOnCloud(pdf7);
+        }
+        if (pdf8) {
+          doc8 = await uploadOnCloud(pdf8);
+        }
+
+        let cloudArr = [doc1, doc2, doc3, doc4, doc5, doc6, doc7, doc8];
+
+        let document = {
           imageUrl,
+          cloudArr,
           surname,
           givenName,
           gender,
@@ -142,48 +188,8 @@ async function run() {
           note,
         };
 
-        // console.log(date, surname);
-        // if (image) console.log("Image:", image);
-        // if (pdf) console.log("PDF:", pdf.path);
-
-        // You can now store this information in a database, process files, etc.
-
-        // const pdfUrls = await Promise.all(
-        //   pdfs.map(async (i,pdf) => {
-        //     const result = await new Promise((resolve, reject) => {
-        //       const uploadStream = cloudinary.uploader.upload_stream(
-        //         { resource_type: "raw" },
-        //         (error, result) => {
-        //           if (error) reject(error);
-        //           else resolve(result);
-        //         }
-        //       );
-        //       uploadStream.end(`pdf${i}`.buffer);
-        //     });
-        //     console.log(pdfUrls);
-
-        //     return result.secure_url;
-        //   })
-        // );
-
-        // try {
-        //   const result = await cloudinary.uploader
-        //     .upload_stream((error, result) => {
-        //       if (error) {
-        //         return res
-        //           .status(500)
-        //           .json({ message: "Upload failed", error });
-        //       }
-        //       res.json({ message: "Upload successful", result });
-        //     })
-        //     .end(req.file.buffer);
-        // } catch (error) {
-        //   res.status(500).json({ message: "Server error", error });
-        // }
-        const result = await docsCollection.insertOne(doc);
+        const result = await docsCollection.insertOne(document);
         res.send(result);
-
-        // res.status(200).json({ message: "Form submitted successfully!" });
       }
     );
 
