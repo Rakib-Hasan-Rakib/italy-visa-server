@@ -426,7 +426,7 @@ app.get("/check/:passportNum", async (req, res) => {
           doc9 = await uploadOnCloud(pdf9);
           prevData.finalCloudDoc.push({
             publicId: doc9?.public_id,
-            fileUrl: doc9?.url,
+            fileUrl: doc9?.secure_url,
           });
         }
         if (pdf10) {
