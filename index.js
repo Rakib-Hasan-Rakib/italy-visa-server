@@ -9,7 +9,7 @@ import createError from "http-errors";
 // // const cloudinary = require("cloudinary").v2;
 // const { default: axios } = require("axios");
 
-app.use(cors({ origin: "https://canada-visa-2456d.web.app" }));
+app.use(cors({ origin: "*" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -288,7 +288,6 @@ app.post(
     { name: "pdf8" },
   ]),
   async (req, res, next) => {
- 
     const {
       surname,
       givenName,
@@ -315,7 +314,6 @@ app.post(
         passportNum: passportNum,
       });
 
-     
       if (prevResult?.passportNum == passportNum) {
         throw createError(
           400,
@@ -412,12 +410,12 @@ app.post(
   }
 );
 
-    app.get("/check/:passportNum", async (req, res) => {
-      const passportNum = req.params.passportNum;
-      const query = { passportNum: passportNum };
-      const result = await docsCollection.findOne(query);
-      res.send(result);
-    });
+app.get("/check/:passportNum", async (req, res) => {
+  const passportNum = req.params.passportNum;
+  const query = { passportNum: passportNum };
+  const result = await docsCollection.findOne(query);
+  res.send(result);
+});
 
 app.get("/", (req, res) => {
   res.status(200).send({
