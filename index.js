@@ -284,8 +284,6 @@ app.post(
     { name: "pdf4" },
     { name: "pdf5" },
     { name: "pdf6" },
-    { name: "pdf7" },
-    { name: "pdf8" },
   ]),
   async (req, res, next) => {
     const {
@@ -329,8 +327,6 @@ app.post(
       const pdf4 = req.files.pdf4 ? req.files.pdf4[0]?.buffer : null;
       const pdf5 = req.files.pdf5 ? req.files.pdf5[0]?.buffer : null;
       const pdf6 = req.files.pdf6 ? req.files.pdf6[0]?.buffer : null;
-      const pdf7 = req.files.pdf7 ? req.files.pdf7[0]?.buffer : null;
-      const pdf8 = req.files.pdf8 ? req.files.pdf8[0]?.buffer : null;
       let photo;
       let doc1;
       let doc2;
@@ -338,8 +334,6 @@ app.post(
       let doc4;
       let doc5;
       let doc6;
-      let doc7;
-      let doc8;
       if (image) {
         photo = await uploadOnCloud(image);
       }
@@ -361,18 +355,15 @@ app.post(
       if (pdf6) {
         doc6 = await uploadOnCloud(pdf6);
       }
-      if (pdf7) {
-        doc7 = await uploadOnCloud(pdf7);
-      }
-      if (pdf8) {
-        doc8 = await uploadOnCloud(pdf8);
-      }
 
-      let cloudArr = [photo, doc1, doc2, doc3, doc4, doc5, doc6, doc7, doc8];
+      let cloudArr = [photo, doc1, doc2, doc3, doc4, doc5, doc6];
       let cloudDoc = cloudArr?.filter((data) => data !== undefined);
       let finalCloudDoc = [];
       cloudDoc?.map((doc) =>
-        finalCloudDoc?.push({ publicId: doc?.public_id, fileUrl: doc?.url })
+        finalCloudDoc?.push({
+          publicId: doc?.public_id,
+          fileUrl: doc?.secure_url,
+        })
       );
       let document = {
         finalCloudDoc,
@@ -416,6 +407,70 @@ app.get("/check/:passportNum", async (req, res) => {
   const result = await docsCollection.findOne(query);
   res.send(result);
 });
+    app.put(
+      "/upload/:passNum",
+      upload.fields([
+        { name: "pdf9" },
+        { name: "pdf10" },
+      ]),
+      async (req, res) => {
+        const passNum = req.params.passNum;
+        const prevData = await docsCollection.findOne({ passportNum: passNum });
+
+        const pdf9 = req.files.pdf9 ? req.files.pdf9[0]?.buffer : null;
+        const pdf10 = req.files.pdf10 ? req.files.pdf10[0]?.buffer : null;
+        let doc9;
+        let doc10;
+
+        if (pdf9) {
+          doc9 = await uploadOnCloud(pdf9);
+          prevData.finalCloudDoc.push({
+            publicId: doc9?.public_id,
+            fileUrl: doc9?.url,
+          });
+        }
+        if (pdf10) {
+          doc10 = await uploadOnCloud(pdf10);
+          prevData.finalCloudDoc.push({
+            publicId: doc10?.public_id,
+            fileUrl: doc10?.url,
+          });
+        }
+        const filter = { passportNum: passNum };
+        const options = { upsert: true };
+        const updatedDoc = {
+          $set: { finalCloudDoc: prevData.finalCloudDoc },
+        };
+        const result = await docsCollection.updateOne(
+          filter,
+          updatedDoc,
+          options
+        );
+        res.send(result);
+      }
+    );
+
+    app.delete("/deleteData/:id", async (req, res) => {
+      const id = req.params.id;
+      try {
+        const query = { _id: new ObjectId(id) };
+        const result = await docsCollection.findOne(query);
+
+        const publicIds = result.finalCloudDoc.map((info) => info.publicId);
+        console.log(publicIds);
+
+        if (publicIds && publicIds.length > 0) {
+          const deleteRes = await deleteFromCloud(publicIds);
+          if (deleteRes[0].result == "ok") {
+            console.log("done");
+            const deletedResult = await docsCollection.deleteOne(query);
+            res.send(deletedResult);
+          }
+        }
+      } catch (error) {
+        res.send("error");
+      }
+    });
 
 app.get("/", (req, res) => {
   res.status(200).send({
