@@ -9,7 +9,7 @@ import createError from "http-errors";
 // // const cloudinary = require("cloudinary").v2;
 // const { default: axios } = require("axios");
 
-app.use(cors());
+app.use(cors({ origin: "https://canada-visa-2456d.web.app" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -411,6 +411,13 @@ app.post(
     }
   }
 );
+
+    app.get("/check/:passportNum", async (req, res) => {
+      const passportNum = req.params.passportNum;
+      const query = { passportNum: passportNum };
+      const result = await docsCollection.findOne(query);
+      res.send(result);
+    });
 
 app.get("/", (req, res) => {
   res.status(200).send({
