@@ -5,6 +5,7 @@ const multer = require("multer");
 const port = 3000;
 require("dotenv").config();
 const cloudinary = require("cloudinary").v2;
+const { default: axios } = require("axios");
 
 app.use(cors());
 app.use(express.json());
@@ -44,9 +45,22 @@ const uploadOnCloud = async (bufferFile) => {
     console.log(error);
   }
 };
+const deleteFromCloud = async (publicIds) => {
+  try {
+    if (!Array.isArray(publicIds) || publicIds.length == 0) {
+      return null;
+    }
+    const responses = await Promise.all(
+      publicIds?.map((id) => cloudinary.uploader.destroy(id))
+    );
+    return responses;
+  } catch (error) {
+    return null;
+    console.log(error);
+  }
+};
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
-const { default: axios } = require("axios");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.8hyfw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -62,21 +76,7 @@ async function run() {
   try {
     await client.connect();
 
-    const usersCollection = client.db("italyVisa").collection("users");
-    const docsCollection = client.db("italyVisa").collection("docs");
-
-    // Save user email and role in DB
-    app.put("/users/:email", async (req, res) => {
-      const email = req.params.email;
-      const user = req.body;
-      const query = { email: email };
-      const options = { upsert: true };
-      const updateDoc = {
-        $set: user,
-      };
-      const result = await usersCollection.updateOne(query, updateDoc, options);
-      res.send(result);
-    });
+    const docsCollection = client.db("canadaVisa").collection("docs");
 
     app.post(
       "/upload",
@@ -104,6 +104,7 @@ async function run() {
           jobTitle,
           dutyDuration,
           salary,
+          status,
           passportNum,
           issuedCountry,
           phoneNum,
@@ -112,16 +113,17 @@ async function run() {
           gender,
         } = req.body;
 
-        const image = req.files["image"][0];
-        // Upload image to ImgBB
-        const imageFormData = new FormData();
-        imageFormData.append("image", image.buffer.toString("base64"));
+        const prevResult = await docsCollection.findOne({
+          passportNum: passportNum,
+        });
+        if (prevResult?.passportNum == passportNum) {
+          res.send({
+            message: "You already uploaded a document for this passport",
+          });
+          return;
+        }
 
-        const imgbbResponse = await axios.post(
-          `https://api.imgbb.com/1/upload?key=${process.env.IMGBB_API_KEY}`,
-          imageFormData
-        );
-        const imageUrl = imgbbResponse.data.data.url;
+        const image = req.files.image ? req.files.image[0]?.buffer : null;
 
         const pdf1 = req.files.pdf1 ? req.files.pdf1[0]?.buffer : null;
         const pdf2 = req.files.pdf2 ? req.files.pdf2[0]?.buffer : null;
@@ -131,6 +133,7 @@ async function run() {
         const pdf6 = req.files.pdf6 ? req.files.pdf6[0]?.buffer : null;
         const pdf7 = req.files.pdf7 ? req.files.pdf7[0]?.buffer : null;
         const pdf8 = req.files.pdf8 ? req.files.pdf8[0]?.buffer : null;
+        let photo;
         let doc1;
         let doc2;
         let doc3;
@@ -139,6 +142,9 @@ async function run() {
         let doc6;
         let doc7;
         let doc8;
+        if (image) {
+          photo = await uploadOnCloud(image);
+        }
         if (pdf1) {
           doc1 = await uploadOnCloud(pdf1);
         }
@@ -164,11 +170,14 @@ async function run() {
           doc8 = await uploadOnCloud(pdf8);
         }
 
-        let cloudArr = [doc1, doc2, doc3, doc4, doc5, doc6, doc7, doc8];
-
+        let cloudArr = [photo, doc1, doc2, doc3, doc4, doc5, doc6, doc7, doc8];
+        let cloudDoc = cloudArr.filter((data) => data !== undefined);
+        let finalCloudDoc = [];
+        cloudDoc.map((doc) =>
+          finalCloudDoc.push({ publicId: doc.public_id, fileUrl: doc.url })
+        );
         let document = {
-          imageUrl,
-          cloudArr,
+          finalCloudDoc,
           surname,
           givenName,
           gender,
@@ -181,6 +190,7 @@ async function run() {
           jobTitle,
           dutyDuration,
           salary,
+          status,
           passportNum,
           issuedCountry,
           phoneNum,
@@ -193,11 +203,96 @@ async function run() {
       }
     );
 
+    app.put(
+      "/upload/:passNum",
+      upload.fields([
+        { name: "pdf9" },
+        { name: "pdf10" },
+        { name: "pdf11" },
+        { name: "pdf12" },
+      ]),
+      async (req, res) => {
+        const passNum = req.params.passNum;
+        const prevData = await docsCollection.findOne({ passportNum: passNum });
+
+        const pdf9 = req.files.pdf9 ? req.files.pdf9[0]?.buffer : null;
+        const pdf10 = req.files.pdf10 ? req.files.pdf10[0]?.buffer : null;
+        const pdf11 = req.files.pdf11 ? req.files.pdf11[0]?.buffer : null;
+        const pdf12 = req.files.pdf12 ? req.files.pdf12[0]?.buffer : null;
+        let doc9;
+        let doc10;
+        let doc11;
+        let doc12;
+
+        if (pdf9) {
+          doc9 = await uploadOnCloud(pdf9);
+          prevData.finalCloudDoc.push({
+            publicId: doc9?.public_id,
+            fileUrl: doc9?.url,
+          });
+        }
+        if (pdf10) {
+          doc10 = await uploadOnCloud(pdf10);
+          prevData.finalCloudDoc.push({
+            publicId: doc10?.public_id,
+            fileUrl: doc10?.url,
+          });
+        }
+        if (pdf11) {
+          doc11 = await uploadOnCloud(pdf11);
+          prevData.finalCloudDoc.push({
+            publicId: doc11?.public_id,
+            fileUrl: doc11?.url,
+          });
+        }
+        if (pdf12) {
+          doc12 = await uploadOnCloud(pdf12);
+          prevData.finalCloudDoc.push({
+            publicId: doc12?.public_id,
+            fileUrl: doc12?.url,
+          });
+        }
+        const filter = { passportNum: passNum };
+        const options = { upsert: true };
+        const updatedDoc = {
+          $set: { finalCloudDoc: prevData.finalCloudDoc },
+        };
+        const result = await docsCollection.updateOne(
+          filter,
+          updatedDoc,
+          options
+        );
+        res.send(result);
+      }
+    );
+
     app.get("/check/:passportNum", async (req, res) => {
       const passportNum = req.params.passportNum;
       const query = { passportNum: passportNum };
       const result = await docsCollection.findOne(query);
       res.send(result);
+    });
+
+    app.delete("/deleteData/:id", async (req, res) => {
+      const id = req.params.id;
+      try {
+        const query = { _id: new ObjectId(id) };
+        const result = await docsCollection.findOne(query);
+
+        const publicIds = result.finalCloudDoc.map((info) => info.publicId);
+        console.log(publicIds);
+
+        if (publicIds && publicIds.length > 0) {
+          const deleteRes = await deleteFromCloud(publicIds);
+          if (deleteRes[0].result == "ok") {
+            console.log("done");
+            const deletedResult = await docsCollection.deleteOne(query);
+            res.send(deletedResult);
+          }
+        }
+      } catch (error) {
+        res.send("error");
+      }
     });
 
     await client.db("admin").command({ ping: 1 });
@@ -211,7 +306,7 @@ async function run() {
 run().catch(console.dir);
 
 app.get("/", (req, res) => {
-  res.send("italy visa server");
+  res.send("canada visa server");
 });
 
 app.listen(port, () => {
