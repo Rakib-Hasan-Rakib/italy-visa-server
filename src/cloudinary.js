@@ -42,6 +42,5 @@ export const deleteFromCloud = async (publicIds) => {
     return responses;
   } catch (error) {
     return null;
-    console.log(error);
   }
 };

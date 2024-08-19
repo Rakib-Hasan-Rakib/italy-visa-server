@@ -270,7 +270,8 @@ const upload = multer({ storage });
 //   console.log(`Example app listening on port ${port}`);
 // });
 import connectDB, { client } from "./src/config/db.js";
-import { uploadOnCloud } from "./src/cloudinary.js";
+import { deleteFromCloud, uploadOnCloud } from "./src/cloudinary.js";
+import { ObjectId } from "mongodb";
 const db_name = "canadaVisa";
 const docsCollection = client.db(db_name).collection("docs");
 
@@ -407,70 +408,61 @@ app.get("/check/:passportNum", async (req, res) => {
   const result = await docsCollection.findOne(query);
   res.send(result);
 });
-    app.put(
-      "/upload/:passNum",
-      upload.fields([
-        { name: "pdf9" },
-        { name: "pdf10" },
-      ]),
-      async (req, res) => {
-        const passNum = req.params.passNum;
-        const prevData = await docsCollection.findOne({ passportNum: passNum });
+app.put(
+  "/upload/:passNum",
+  upload.fields([{ name: "pdf9" }, { name: "pdf10" }]),
+  async (req, res) => {
+    const passNum = req.params.passNum;
+    const prevData = await docsCollection.findOne({ passportNum: passNum });
 
-        const pdf9 = req.files.pdf9 ? req.files.pdf9[0]?.buffer : null;
-        const pdf10 = req.files.pdf10 ? req.files.pdf10[0]?.buffer : null;
-        let doc9;
-        let doc10;
+    const pdf9 = req.files.pdf9 ? req.files.pdf9[0]?.buffer : null;
+    const pdf10 = req.files.pdf10 ? req.files.pdf10[0]?.buffer : null;
+    let doc9;
+    let doc10;
 
-        if (pdf9) {
-          doc9 = await uploadOnCloud(pdf9);
-          prevData.finalCloudDoc.push({
-            publicId: doc9?.public_id,
-            fileUrl: doc9?.secure_url,
-          });
-        }
-        if (pdf10) {
-          doc10 = await uploadOnCloud(pdf10);
-          prevData.finalCloudDoc.push({
-            publicId: doc10?.public_id,
-            fileUrl: doc10?.url,
-          });
-        }
-        const filter = { passportNum: passNum };
-        const options = { upsert: true };
-        const updatedDoc = {
-          $set: { finalCloudDoc: prevData.finalCloudDoc },
-        };
-        const result = await docsCollection.updateOne(
-          filter,
-          updatedDoc,
-          options
-        );
-        res.send(result);
+    if (pdf9) {
+      doc9 = await uploadOnCloud(pdf9);
+      prevData.finalCloudDoc.push({
+        publicId: doc9?.public_id,
+        fileUrl: doc9?.secure_url,
+      });
+    }
+    if (pdf10) {
+      doc10 = await uploadOnCloud(pdf10);
+      prevData.finalCloudDoc.push({
+        publicId: doc10?.public_id,
+        fileUrl: doc10?.url,
+      });
+    }
+    const filter = { passportNum: passNum };
+    const options = { upsert: true };
+    const updatedDoc = {
+      $set: { finalCloudDoc: prevData.finalCloudDoc },
+    };
+    const result = await docsCollection.updateOne(filter, updatedDoc, options);
+    res.send(result);
+  }
+);
+
+app.delete("/deleteData/:id", async (req, res) => {
+  const id = req.params.id;
+  try {
+    const query = { _id: new ObjectId(id) };
+    const result = await docsCollection.findOne(query);
+
+    const publicIds = result?.finalCloudDoc?.map((info) => info.publicId);
+    if (publicIds && publicIds.length > 0) {
+      const deleteRes = await deleteFromCloud(publicIds);
+      if (deleteRes[0].result == "ok") {
+        console.log("done");
+        const deletedResult = await docsCollection.deleteOne(query);
+        res.send(deletedResult);
       }
-    );
-
-    app.delete("/deleteData/:id", async (req, res) => {
-      const id = req.params.id;
-      try {
-        const query = { _id: new ObjectId(id) };
-        const result = await docsCollection.findOne(query);
-
-        const publicIds = result.finalCloudDoc.map((info) => info.publicId);
-        console.log(publicIds);
-
-        if (publicIds && publicIds.length > 0) {
-          const deleteRes = await deleteFromCloud(publicIds);
-          if (deleteRes[0].result == "ok") {
-            console.log("done");
-            const deletedResult = await docsCollection.deleteOne(query);
-            res.send(deletedResult);
-          }
-        }
-      } catch (error) {
-        res.send("error");
-      }
-    });
+    }
+  } catch (error) {
+    res.send("error");
+  }
+});
 
 app.get("/", (req, res) => {
   res.status(200).send({
