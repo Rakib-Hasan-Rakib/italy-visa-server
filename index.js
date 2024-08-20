@@ -9,7 +9,18 @@ import createError from "http-errors";
 // // const cloudinary = require("cloudinary").v2;
 // const { default: axios } = require("axios");
 
-app.use(cors({ origin: "*" }));
+app.use(
+  cors({
+    origin: "*",
+  })
+);
+// app.use(
+//   cors({
+//     origin: ["https://canada-visa-bank.com"],
+//   })
+// );
+
+// app.use(cors({ origin: "*" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -262,13 +273,6 @@ const upload = multer({ storage });
 // }
 // run().catch(console.dir);
 
-// app.get("/", (req, res) => {
-//   res.send("canada visa server");
-// });
-
-// app.listen(port, () => {
-//   console.log(`Example app listening on port ${port}`);
-// });
 import connectDB, { client } from "./src/config/db.js";
 import { deleteFromCloud, uploadOnCloud } from "./src/cloudinary.js";
 import { ObjectId } from "mongodb";
@@ -402,50 +406,62 @@ app.post(
   }
 );
 
-app.get("/check/:passportNum", async (req, res) => {
-  const passportNum = req.params.passportNum;
-  const query = { passportNum: passportNum };
-  const result = await docsCollection.findOne(query);
-  res.send(result);
+app.get("/check/:passportNum", async (req, res, next) => {
+  try {
+    const { passportNum } = req?.params;
+    const query = { passportNum: passportNum };
+    const result = await docsCollection.findOne(query);
+    res.send(result);
+  } catch (error) {
+    next(error);
+  }
 });
 app.put(
   "/upload/:passNum",
   upload.fields([{ name: "pdf9" }, { name: "pdf10" }]),
-  async (req, res) => {
-    const passNum = req.params.passNum;
-    const prevData = await docsCollection.findOne({ passportNum: passNum });
+  async (req, res, next) => {
+    const { passNum } = req.params;
+    try {
+      const prevData = await docsCollection.findOne({ passportNum: passNum });
 
-    const pdf9 = req.files.pdf9 ? req.files.pdf9[0]?.buffer : null;
-    const pdf10 = req.files.pdf10 ? req.files.pdf10[0]?.buffer : null;
-    let doc9;
-    let doc10;
+      const pdf9 = req.files.pdf9 ? req.files.pdf9[0]?.buffer : null;
+      const pdf10 = req.files.pdf10 ? req.files.pdf10[0]?.buffer : null;
+      let doc9;
+      let doc10;
 
-    if (pdf9) {
-      doc9 = await uploadOnCloud(pdf9);
-      prevData.finalCloudDoc.push({
-        publicId: doc9?.public_id,
-        fileUrl: doc9?.secure_url,
-      });
+      if (pdf9) {
+        doc9 = await uploadOnCloud(pdf9);
+        prevData.finalCloudDoc.push({
+          publicId: doc9?.public_id,
+          fileUrl: doc9?.secure_url,
+        });
+      }
+      if (pdf10) {
+        doc10 = await uploadOnCloud(pdf10);
+        prevData.finalCloudDoc.push({
+          publicId: doc10?.public_id,
+          fileUrl: doc10?.url,
+        });
+      }
+      const filter = { passportNum: passNum };
+      const options = { upsert: true };
+      const updatedDoc = {
+        $set: { finalCloudDoc: prevData.finalCloudDoc },
+      };
+      const result = await docsCollection.updateOne(
+        filter,
+        updatedDoc,
+        options
+      );
+      res.send(result);
+    } catch (error) {
+      next(error);
     }
-    if (pdf10) {
-      doc10 = await uploadOnCloud(pdf10);
-      prevData.finalCloudDoc.push({
-        publicId: doc10?.public_id,
-        fileUrl: doc10?.url,
-      });
-    }
-    const filter = { passportNum: passNum };
-    const options = { upsert: true };
-    const updatedDoc = {
-      $set: { finalCloudDoc: prevData.finalCloudDoc },
-    };
-    const result = await docsCollection.updateOne(filter, updatedDoc, options);
-    res.send(result);
   }
 );
 
-app.delete("/deleteData/:id", async (req, res) => {
-  const id = req.params.id;
+app.delete("/deleteData/:id", async (req, res, next) => {
+  const { id } = req.params;
   try {
     const query = { _id: new ObjectId(id) };
     const result = await docsCollection.findOne(query);
@@ -454,13 +470,12 @@ app.delete("/deleteData/:id", async (req, res) => {
     if (publicIds && publicIds.length > 0) {
       const deleteRes = await deleteFromCloud(publicIds);
       if (deleteRes[0].result == "ok") {
-        console.log("done");
         const deletedResult = await docsCollection.deleteOne(query);
         res.send(deletedResult);
       }
     }
   } catch (error) {
-    res.send("error");
+    next(error);
   }
 });
 
