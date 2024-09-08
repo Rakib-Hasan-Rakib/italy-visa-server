@@ -291,26 +291,7 @@ app.post(
     { name: "pdf6" },
   ]),
   async (req, res, next) => {
-    const {
-      surname,
-      givenName,
-      date,
-      city,
-      identy,
-      nationality,
-      nid,
-      companyName,
-      jobTitle,
-      dutyDuration,
-      salary,
-      status,
-      passportNum,
-      issuedCountry,
-      phoneNum,
-      email,
-      note,
-      gender,
-    } = req.body;
+    const { surname, givenName, date, status, passportNum } = req.body;
 
     try {
       const prevResult = await docsCollection.findOne({
@@ -374,22 +355,9 @@ app.post(
         finalCloudDoc,
         surname,
         givenName,
-        gender,
         date,
-        city,
-        identy,
-        nationality,
-        nid,
-        companyName,
-        jobTitle,
-        dutyDuration,
-        salary,
         status,
         passportNum,
-        issuedCountry,
-        phoneNum,
-        email,
-        note,
       };
 
       const result = await docsCollection.insertOne(document);
